@@ -1,0 +1,11 @@
+# Example: how to add dsh-session-analyst to a dsh profile
+#
+# Place this in your profile's cordis.patch.yml or pass via --patch:
+#   dsh --profile web --patch ./cordis.example.yml
+
+- id: session-analyst
+  plugin: dsh-session-analyst
+  config:
+    liveMonitoring: false
+    redundantCallThreshold: 3
+    excessiveStepThreshold: 10
