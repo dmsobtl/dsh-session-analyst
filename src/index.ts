@@ -2,106 +2,124 @@
  * dsh-session-analyst: Session quality analysis plugin for DeepSeek Harness.
  *
  * Registers two model-facing tools:
- * - `analyze_session`: Parse and analyze a session JSONL file
+ * - `analyze_session`: Parse and analyze a session log file (`.jsonl` or `.jsonl.zstd`)
  * - `compare_sessions`: Compare two sessions to detect regressions
  *
- * Also provides a `session/event` listener for live quality monitoring.
+ * The parser/analyzer/comparator are also exported as a standalone library.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import { defineTool } from '@deepseek-ai/dsh-tools'
 import { parseSessionFile } from './parser.ts'
-import { analyzeSession } from './analyzer.ts'
-import { compareSessions } from './comparator.ts'
+import { analyzeSession, type SessionAnalysis } from './analyzer.ts'
+import { compareSessions, type ComparisonResult } from './comparator.ts'
 
 export { parseSessionFile, parseSessionContent } from './parser.ts'
 export { analyzeSession } from './analyzer.ts'
 export { compareSessions } from './comparator.ts'
-export type { SessionAnalysis, TurnMetrics, Issue, ToolStats, TokenStats } from './analyzer.ts'
+export type { SessionAnalysis, TurnMetrics, Issue, ToolStats, TokenStats, AnalyzeOptions } from './analyzer.ts'
 export type { ComparisonResult, Regression } from './comparator.ts'
 
 export const name = 'session-analyst'
 export const inject = ['tools']
 
-export interface Config {
-  liveMonitoring?: boolean
-  redundantCallThreshold?: number
-  excessiveStepThreshold?: number
+export const Config = z.object({
+  redundantCallThreshold: z.number().default(3),
+  excessiveStepThreshold: z.number().default(10),
+})
+
+interface ResolvedConfig {
+  redundantCallThreshold: number
+  excessiveStepThreshold: number
 }
 
-export function apply(ctx: Context, config: Config) {
-  const redundantThreshold = config.redundantCallThreshold ?? 3
-  const excessiveSteps = config.excessiveStepThreshold ?? 10
+export function apply(ctx: Context, config: ResolvedConfig) {
+  const { redundantCallThreshold, excessiveStepThreshold } = config
 
-  ctx.tools.register({
+  ctx.tools.register(defineTool({
     name: 'analyze_session',
-    description: 'Analyze a DSH session JSONL file and return structured quality metrics: tool success rate, token efficiency, redundant calls, error patterns, and turn-by-turn breakdown.',
+    description: 'Analyze a DSH session log file (.jsonl or .jsonl.zstd) and return structured quality metrics: tool success rate, token efficiency, redundant calls, error patterns, and a turn-by-turn breakdown.',
     parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Absolute path to the session .jsonl file',
-        },
+      path: {
+        type: 'string',
+        required: true,
+        description: 'Absolute path to the session .jsonl or .jsonl.zstd file',
       },
-      required: ['path'],
     },
-    async execute(args: { path: string }) {
+    output: {
+      schema: { type: 'json' },
+      render: (_args, value) => [{ type: 'text', text: renderAnalysis(value) }],
+    },
+    async execute(args) {
       const session = await parseSessionFile(args.path)
-      const analysis = analyzeSession(session)
-
-      const issuesSummary = analysis.issues.length > 0
-        ? `\n\nIssues found (${analysis.issues.length}):\n` +
-          analysis.issues.map(i => `  [${i.severity.toUpperCase()}] ${i.code}: ${i.message}`).join('\n')
-        : '\n\nNo issues detected.'
-
-      const toolSummary = Object.entries(analysis.toolStats.byName)
-        .map(([name, stat]) => `  ${name}: ${stat.count} calls, ${stat.errors} errors, avg ${Math.round(stat.avgDurationMs)}ms`)
-        .join('\n')
-
-      return [{ type: 'text', text: JSON.stringify({
-        summary: analysis.summary,
-        tokenStats: analysis.tokenStats,
-        toolStats: { byName: analysis.toolStats.byName, errorRate: analysis.toolStats.errorRate },
-        redundantCalls: analysis.toolStats.redundantCalls.slice(0, 10),
-        issues: analysis.issues,
-        turns: analysis.turns.map(t => ({
-          turn: t.turn,
-          steps: t.stepCount,
-          toolCalls: t.toolCalls.length,
-          errors: t.toolCalls.filter(tc => tc.isError).length,
-          endReason: t.endReason,
-          durationMs: t.durationMs,
-        })),
-      }, null, 2)}]
+      const analysis = analyzeSession(session, { redundantCallThreshold, excessiveStepThreshold })
+      return JSON.parse(JSON.stringify(analysis))
     },
-  })
+  }))
 
-  ctx.tools.register({
+  ctx.tools.register(defineTool({
     name: 'compare_sessions',
-    description: 'Compare two session JSONL files (baseline vs current) and report regressions, improvements, and deltas across quality dimensions.',
+    description: 'Compare two DSH session log files (baseline vs current) and report regressions, improvements, and deltas across quality dimensions.',
     parameters: {
-      type: 'object',
-      properties: {
-        baseline: {
-          type: 'string',
-          description: 'Path to the baseline session .jsonl file',
-        },
-        current: {
-          type: 'string',
-          description: 'Path to the current session .jsonl file',
-        },
+      baseline: {
+        type: 'string',
+        required: true,
+        description: 'Path to the baseline session .jsonl or .jsonl.zstd file',
       },
-      required: ['baseline', 'current'],
+      current: {
+        type: 'string',
+        required: true,
+        description: 'Path to the current session .jsonl or .jsonl.zstd file',
+      },
     },
-    async execute(args: { baseline: string; current: string }) {
+    output: {
+      schema: { type: 'json' },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+    },
+    async execute(args) {
       const baselineSession = await parseSessionFile(args.baseline)
       const currentSession = await parseSessionFile(args.current)
-
-      const baselineAnalysis = analyzeSession(baselineSession)
-      const currentAnalysis = analyzeSession(currentSession)
+      const baselineAnalysis = analyzeSession(baselineSession, { redundantCallThreshold, excessiveStepThreshold })
+      const currentAnalysis = analyzeSession(currentSession, { redundantCallThreshold, excessiveStepThreshold })
       const comparison = compareSessions(baselineAnalysis, currentAnalysis)
-
-      return [{ type: 'text', text: JSON.stringify(comparison, null, 2) }]
+      return JSON.parse(JSON.stringify(comparison))
     },
-  })
+  }))
+}
+
+/** Compact, human-readable rendering of an analysis for the model. */
+function renderAnalysis(value: unknown): string {
+  const a = value as SessionAnalysis
+  const { summary, tokenStats, toolStats, issues } = a
+
+  const toolLines = Object.entries(toolStats.byName).map(
+    ([toolName, stat]) => `  ${toolName}: ${stat.count} calls, ${stat.errors} errors, avg ${Math.round(stat.avgDurationMs)}ms`,
+  )
+
+  const parts: string[] = [
+    `Session ${a.sessionId}`,
+    `  turns=${summary.totalTurns} steps=${summary.totalSteps} toolCalls=${summary.totalToolCalls}`,
+    `  errors=${summary.totalErrors} successRate=${(summary.successRate * 100).toFixed(1)}% duration=${(summary.totalDurationMs / 1000).toFixed(1)}s`,
+    `  avgStepsPerTurn=${summary.avgStepsPerTurn.toFixed(2)} avgToolCallsPerTurn=${summary.avgToolCallsPerTurn.toFixed(2)}`,
+    '',
+    `Token stats: input=${tokenStats.totalInput} output=${tokenStats.totalOutput} reasoning=${tokenStats.totalReasoning} cacheRead=${tokenStats.totalCacheRead} efficiency=${(tokenStats.efficiency * 100).toFixed(1)}%`,
+    '',
+    'Tool stats:',
+    ...(toolLines.length > 0 ? toolLines : ['  (none)']),
+  ]
+
+  if (toolStats.redundantCalls.length > 0) {
+    parts.push('', 'Redundant calls:')
+    parts.push(...toolStats.redundantCalls.slice(0, 10).map((r) => `  ${r.name} x${r.occurrences}${r.arguments ? ` ${r.arguments.slice(0, 80)}` : ''}`))
+  }
+
+  if (issues.length > 0) {
+    parts.push('', `Issues (${issues.length}):`)
+    parts.push(...issues.map((i) => `  [${i.severity.toUpperCase()}] ${i.code}: ${i.message}`))
+  } else {
+    parts.push('', 'No issues detected.')
+  }
+
+  return parts.join('\n')
 }

@@ -6,6 +6,5 @@
 - id: session-analyst
   plugin: dsh-session-analyst
   config:
-    liveMonitoring: false
     redundantCallThreshold: 3
     excessiveStepThreshold: 10

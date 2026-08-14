@@ -24,7 +24,7 @@ Or add to your `cordis.patch.yml`:
 
 ### `analyze_session`
 
-Parse a session JSONL file and return quality metrics.
+Parse a session log file (`.jsonl` or compressed `.jsonl.zstd`) and return quality metrics.
 
 ```
 Agent: I'll analyze the session from the last run.
