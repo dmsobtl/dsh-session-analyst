@@ -3,14 +3,19 @@
   "version": "0.1.0",
   "description": "Session quality analysis plugin for DeepSeek Harness — detect inefficiencies, redundant tool calls, and regressions in agent behavior.",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
   },
+  "files": ["lib"],
   "scripts": {
     "test": "vitest run",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "prepublishOnly": "tsc"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

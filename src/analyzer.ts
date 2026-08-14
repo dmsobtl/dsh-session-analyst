@@ -9,7 +9,7 @@
  *     `reasoningTokens` / `cacheReadTokens`).
  */
 
-import type { ParsedSession, SessionEvent } from './parser.ts'
+import type { ParsedSession, SessionEvent } from './parser.js'
 
 export interface AnalyzeOptions {
   /** Calls with identical name+arguments beyond this many times are flagged redundant. */

@@ -2,7 +2,7 @@
  * Session comparison: detect regressions between a baseline and current session.
  */
 
-import type { SessionAnalysis, TurnMetrics } from './analyzer.ts'
+import type { SessionAnalysis, TurnMetrics } from './analyzer.js'
 
 export interface ComparisonResult {
   verdict: 'improved' | 'regressed' | 'unchanged'

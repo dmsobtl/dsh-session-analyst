@@ -11,15 +11,15 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { parseSessionFile } from './parser.ts'
-import { analyzeSession, type SessionAnalysis } from './analyzer.ts'
-import { compareSessions, type ComparisonResult } from './comparator.ts'
+import { parseSessionFile } from './parser.js'
+import { analyzeSession, type SessionAnalysis } from './analyzer.js'
+import { compareSessions, type ComparisonResult } from './comparator.js'
 
-export { parseSessionFile, parseSessionContent } from './parser.ts'
-export { analyzeSession } from './analyzer.ts'
-export { compareSessions } from './comparator.ts'
-export type { SessionAnalysis, TurnMetrics, Issue, ToolStats, TokenStats, AnalyzeOptions } from './analyzer.ts'
-export type { ComparisonResult, Regression } from './comparator.ts'
+export { parseSessionFile, parseSessionContent } from './parser.js'
+export { analyzeSession } from './analyzer.js'
+export { compareSessions } from './comparator.js'
+export type { SessionAnalysis, TurnMetrics, Issue, ToolStats, TokenStats, AnalyzeOptions } from './analyzer.js'
+export type { ComparisonResult, Regression } from './comparator.js'
 
 export const name = 'session-analyst'
 export const inject = ['tools']
