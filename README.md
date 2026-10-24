@@ -1,5 +1,7 @@
 # dsh-session-analyst
 
+> 兼容 dsh 0.2.1-rc.x（@deepseek-ai/cordis ~4.0.5、@deepseek-ai/dsh-tools ~0.2.1-rc.2）。v0.1.1 起 content block 为扁平结构、工具结果为 role:'tool' 消息。
+
 Session quality analysis plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
 Gives the agent (and you) structured insight into session behavior: tool success rates, token efficiency, redundant calls, error patterns, and regression detection.

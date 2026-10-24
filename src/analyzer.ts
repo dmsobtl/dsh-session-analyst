@@ -1,10 +1,12 @@
 /**
  * Core analysis engine. Computes quality metrics from parsed session events.
  *
- * Metrics are derived from the REAL DSH session event shapes:
- *   - `tool/result` carries the call id at `data.message.source.callId` and the
- *     error flag on its `tool-result` content block (`data.message.content[].isError`),
- *     or as an internal failure at `data.error`.
+ * Metrics are derived from the REAL DSH session event shapes (dsh 0.2.x):
+ *   - `tool/result` carries a first-class tool-role message
+ *     (`data.message.role === 'tool'`, call id at `data.message.source.callId`,
+ *     failure flag at `data.message.isError`), plus an optional internal
+ *     failure identity at `data.error`. Pre-0.2 logs put the flag on a nested
+ *     `tool-result` content block, so that shape is read as a fallback.
  *   - `assistant/message` carries `data.usage` (`inputTokens` / `outputTokens` /
  *     `reasoningTokens` / `cacheReadTokens`).
  */
@@ -165,7 +167,8 @@ function resolveToolResultCallId(data: Record<string, unknown>): string | undefi
 /** Whether a real `tool/result` event represents a failed call. */
 function resolveToolResultIsError(data: Record<string, unknown>): boolean {
   if (data.error !== undefined && data.error !== null) return true
-  const message = data.message as { content?: unknown } | undefined
+  const message = data.message as { isError?: unknown; content?: unknown } | undefined
+  if (message?.isError === true) return true
   if (Array.isArray(message?.content)) {
     for (const block of message.content) {
       if (block && typeof block === 'object') {

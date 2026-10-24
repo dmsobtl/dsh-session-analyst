@@ -7,21 +7,22 @@ import { parseSessionContent, parseSessionFile } from '../src/parser.ts'
 import { analyzeSession } from '../src/analyzer.ts'
 import { compareSessions } from '../src/comparator.ts'
 
-// Fixtures use the REAL DSH session log shapes:
+// Fixtures use the REAL DSH 0.2.x session log shapes:
 //   - header carries `delegationDepth` and `agentPreset`
-//   - `tool/result` nests callId at `message.source.callId` and the error flag
-//     on the `tool-result` content block, never at the top level.
+//   - `tool/result` carries a first-class tool-role message: call id at
+//     `message.source.callId`, error flag at `message.isError`, and optional
+//     failure identity at the event level `error`. Content blocks are flat.
 
 const HEALTHY_SESSION = `{"type":"session","version":0,"id":"test-001","createdAt":1700000000000,"cwd":"E:\\\\work","delegationDepth":0,"agentPreset":"standard"}
 {"type":"turn/start","seq":1,"time":1000,"data":{"turn":1}}
 {"type":"step/start","seq":2,"time":1001,"data":{"turn":1,"step":1}}
 {"type":"tool/call","seq":3,"time":1100,"data":{"turn":1,"step":1,"callId":"c1","name":"pwsh","arguments":"{\\"command\\":\\"ls\\"}"}}
-{"type":"tool/result","seq":4,"time":1500,"data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"c1"},"content":[{"type":"tool-result","toolCallId":"c1","content":[{"type":"text","text":"file1.ts"}],"isError":false}]},"sourceEventSeqs":[3],"surfaceOp":"append"}}
+{"type":"tool/result","seq":4,"time":1500,"data":{"turn":1,"step":1,"message":{"role":"tool","source":{"kind":"tool","callId":"c1"},"content":[{"type":"text","text":"file1.ts"}],"isError":false},"sourceEventSeqs":[3],"surfaceOp":"append"}}
 {"type":"assistant/message","seq":5,"time":1600,"data":{"turn":1,"step":1,"message":{"role":"assistant","content":[]},"usage":{"inputTokens":100,"outputTokens":20,"reasoningTokens":10,"cacheReadTokens":0}}}
 {"type":"step/end","seq":6,"time":1601,"data":{"turn":1,"step":1}}
 {"type":"step/start","seq":7,"time":1700,"data":{"turn":1,"step":2}}
 {"type":"tool/call","seq":8,"time":1800,"data":{"turn":1,"step":2,"callId":"c2","name":"read","arguments":"{\\"path\\":\\"file1.ts\\"}"}}
-{"type":"tool/result","seq":9,"time":2000,"data":{"turn":1,"step":2,"message":{"source":{"kind":"tool","callId":"c2"},"content":[{"type":"tool-result","toolCallId":"c2","content":[{"type":"text","text":"export function add(a,b){return a+b}"}],"isError":false}]}}}
+{"type":"tool/result","seq":9,"time":2000,"data":{"turn":1,"step":2,"message":{"role":"tool","source":{"kind":"tool","callId":"c2"},"content":[{"type":"text","text":"export function add(a,b){return a+b}"}],"isError":false}}}
 {"type":"assistant/message","seq":10,"time":2100,"data":{"turn":1,"step":2,"message":{"role":"assistant","content":[]},"usage":{"inputTokens":150,"outputTokens":30,"reasoningTokens":0,"cacheReadTokens":0}}}
 {"type":"step/end","seq":11,"time":2101,"data":{"turn":1,"step":2}}
 {"type":"turn/end","seq":12,"time":2200,"data":{"turn":1,"reason":{"kind":"completed"}}}`
@@ -30,17 +31,17 @@ const ERROR_SESSION = `{"type":"session","version":0,"id":"test-002","createdAt"
 {"type":"turn/start","seq":1,"time":1000,"data":{"turn":1}}
 {"type":"step/start","seq":2,"time":1001,"data":{"turn":1,"step":1}}
 {"type":"tool/call","seq":3,"time":1100,"data":{"turn":1,"step":1,"callId":"c1","name":"bash","arguments":"{\\"command\\":\\"rm -rf /\\"}"}}
-{"type":"tool/result","seq":4,"time":1500,"data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"c1"},"content":[{"type":"tool-result","toolCallId":"c1","content":[{"type":"text","text":"Permission denied"}],"isError":true}]}}}
+{"type":"tool/result","seq":4,"time":1500,"data":{"turn":1,"step":1,"message":{"role":"tool","source":{"kind":"tool","callId":"c1"},"content":[{"type":"text","text":"Permission denied"}],"isError":true},"error":{"name":"ToolError","code":"E_PERM","reason":"Permission denied"}}}
 {"type":"assistant/message","seq":5,"time":1600,"data":{"turn":1,"step":1,"message":{"role":"assistant","content":[]},"usage":{"inputTokens":200,"outputTokens":50}}}
 {"type":"step/end","seq":6,"time":1601,"data":{"turn":1,"step":1}}
 {"type":"step/start","seq":7,"time":1700,"data":{"turn":1,"step":2}}
 {"type":"tool/call","seq":8,"time":1800,"data":{"turn":1,"step":2,"callId":"c2","name":"bash","arguments":"{\\"command\\":\\"rm -rf /\\"}"}}
-{"type":"tool/result","seq":9,"time":2000,"data":{"turn":1,"step":2,"message":{"source":{"kind":"tool","callId":"c2"},"content":[{"type":"tool-result","toolCallId":"c2","content":[{"type":"text","text":"Permission denied"}],"isError":true}]}}}
+{"type":"tool/result","seq":9,"time":2000,"data":{"turn":1,"step":2,"message":{"role":"tool","source":{"kind":"tool","callId":"c2"},"content":[{"type":"text","text":"Permission denied"}],"isError":true},"error":{"name":"ToolError","code":"E_PERM","reason":"Permission denied"}}}
 {"type":"assistant/message","seq":10,"time":2100,"data":{"turn":1,"step":2,"message":{"role":"assistant","content":[]},"usage":{"inputTokens":250,"outputTokens":40}}}
 {"type":"step/end","seq":11,"time":2101,"data":{"turn":1,"step":2}}
 {"type":"step/start","seq":12,"time":2200,"data":{"turn":1,"step":3}}
 {"type":"tool/call","seq":13,"time":2300,"data":{"turn":1,"step":3,"callId":"c3","name":"bash","arguments":"{\\"command\\":\\"rm -rf /\\"}"}}
-{"type":"tool/result","seq":14,"time":2500,"data":{"turn":1,"step":3,"message":{"source":{"kind":"tool","callId":"c3"},"content":[{"type":"tool-result","toolCallId":"c3","content":[{"type":"text","text":"Permission denied"}],"isError":true}]}}}
+{"type":"tool/result","seq":14,"time":2500,"data":{"turn":1,"step":3,"message":{"role":"tool","source":{"kind":"tool","callId":"c3"},"content":[{"type":"text","text":"Permission denied"}],"isError":true},"error":{"name":"ToolError","code":"E_PERM","reason":"Permission denied"}}}
 {"type":"assistant/message","seq":15,"time":2600,"data":{"turn":1,"step":3,"message":{"role":"assistant","content":[]},"usage":{"inputTokens":300,"outputTokens":10}}}
 {"type":"step/end","seq":16,"time":2601,"data":{"turn":1,"step":3}}
 {"type":"turn/end","seq":17,"time":2700,"data":{"turn":1,"reason":{"kind":"error","error":{"message":"All attempts failed","code":"UNKNOWN"}}}}`
@@ -49,7 +50,7 @@ const OPEN_TURN_SESSION = `{"type":"session","version":0,"id":"test-003","create
 {"type":"turn/start","seq":1,"time":1000,"data":{"turn":1}}
 {"type":"step/start","seq":2,"time":1001,"data":{"turn":1,"step":1}}
 {"type":"tool/call","seq":3,"time":1100,"data":{"turn":1,"step":1,"callId":"c1","name":"pwsh","arguments":"{}"}}
-{"type":"tool/result","seq":4,"time":1500,"data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"c1"},"content":[{"type":"tool-result","toolCallId":"c1","content":[],"isError":false}]}}}
+{"type":"tool/result","seq":4,"time":1500,"data":{"turn":1,"step":1,"message":{"role":"tool","source":{"kind":"tool","callId":"c1"},"content":[],"isError":false}}}
 {"type":"text-chunks","seq0":5,"time0":1600,"members":[]}
 {"type":"reasoning-chunks","seq0":6,"time0":1700,"members":[]}`
 
@@ -58,7 +59,7 @@ describe('parseSessionContent', () => {
     const session = parseSessionContent(HEALTHY_SESSION)
     expect(session.header.id).toBe('test-001')
     expect(session.header.delegationDepth).toBe(0)
-    expect(session.events.length).toBe(11)
+    expect(session.events.length).toBe(12)
   })
 
   it('skips packed chunk rows (no event envelope)', () => {
@@ -88,7 +89,7 @@ describe('analyzeSession', () => {
     expect(analysis.tokenStats.totalReasoning).toBe(10)
   })
 
-  it('detects tool errors from the nested tool-result block', () => {
+  it('detects tool errors from the tool-role message', () => {
     const analysis = analyzeSession(parseSessionContent(ERROR_SESSION))
     expect(analysis.summary.totalErrors).toBe(3)
     expect(analysis.summary.successRate).toBe(0)
@@ -126,7 +127,7 @@ describe('parseSessionFile', () => {
     try {
       const session = await parseSessionFile(path)
       expect(session.header.id).toBe('test-001')
-      expect(session.events.length).toBe(11)
+      expect(session.events.length).toBe(12)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
